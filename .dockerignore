@@ -1,0 +1,26 @@
+# この Dockerfile はビルド時にローカルのファイルを COPY しません
+# （Haas-ASR を git clone して uv sync する）。
+# それでもビルド時のコンテキスト転送を軽くするため、巨大になりうるものを除外する。
+
+.git/
+_local/
+
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.m4a
+*.mp4
+*.webm
+*.mkv
+*.avi
+*.mov
+*.txt
+*.nemo
+
+.venv/
+__pycache__/
+*.pyc
+.cache/
+models/
+.huggingface/

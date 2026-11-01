@@ -1,0 +1,27 @@
+# 改行の扱いを固定する（Windows の .bat/.ps1 と Docker の両方を使うため）
+* text=auto
+
+# Windows で直接実行するもの
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Linux / Docker 側で読むもの
+Dockerfile text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+
+# テキストとして扱いたくないもの
+*.wav binary
+*.flac binary
+*.mp3 binary
+*.ogg binary
+*.m4a binary
+*.mp4 binary
+*.webm binary
+*.nemo binary
+*.png binary
