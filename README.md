@@ -29,7 +29,62 @@ Python も ffmpeg もインストールせず、`.bat` にファイルをドラ�
 | PowerShell | **PowerShell 7（`pwsh`）が必要です。** `run_browser.bat` 以外の `.bat` は `pwsh` で動きます（`winget install Microsoft.PowerShell` でインストールできます） |
 | 不要なもの | Python / uv / ffmpeg / NeMo のインストール、Hugging Face へのログイン |
 
+### 0. 準備（1回だけ）
+
+すでに Docker Desktop で GPU を使えている場合は、手順 4 の確認だけして「1. イメージを作る」へ進んでください。
+
+**1) NVIDIA のドライバを Windows に入れる**
+
+[NVIDIA のドライバのページ](https://www.nvidia.com/drivers/) から、お使いの GPU 向けの最新ドライバを Windows にインストールします。
+このイメージは CUDA 13.0 を使うので、**それに対応した新しいドライバ（580 番台以降が目安）**が必要です。
+作者の環境は GeForce RTX 5070 Ti + ドライバ 610.88 です。
+
+Windows 用のドライバを入れれば、WSL2 からも GPU が使えるようになります。
+**WSL（Linux）の中に NVIDIA のドライバや CUDA を別に入れる必要はありません**（入れるとかえって動かなくなることがあります）。
+
+**2) WSL2 を入れる**
+
+PowerShell を**管理者として実行**し、次のコマンドを実行してから、Windows を再起動します。
+
+```bat
+wsl --install
+```
+
+すでに WSL を入れている場合は、`wsl --update` で最新にしておいてください。
+
+**3) Docker Desktop を入れる**
+
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) をインストールして起動します。
+インストール時の「Use WSL 2 instead of Hyper-V」（設定画面では「Use the WSL 2 based engine」）はオンのままにしてください。
+Docker Desktop は、個人や小規模な組織なら無料で使えますが、大きな企業で使う場合は有料のプランが必要です（詳しくは Docker の利用条件を確認してください）。
+
+Docker のデータは、既定では C ドライブに保存されます。このイメージだけで数十 GB を使うので、C ドライブに余裕がない場合は
+Docker Desktop の Settings → Resources → Advanced → **Disk image location** で、保存先を別のドライブに変えておくと安心です。
+
+**4) Docker から GPU が見えるか確かめる**
+
+Docker Desktop を起動した状態で、PowerShell かコマンドプロンプトで次を実行します。
+
+```bat
+docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
+```
+
+GPU の名前やドライバのバージョンが入った表が出れば準備完了です。エラーになる場合は、下の「トラブルシューティング」を見てください。
+
+**5) このリポジトリを取ってくる**
+
+`git` を使っているなら clone します。使っていなければ、このページの緑色の **Code** ボタン → **Download ZIP** でダウンロードして展開してください。
+
+```bat
+git clone https://github.com/bluefuji/haas-asr-windows-docker.git
+```
+
+以降のコマンドは、このフォルダ（`Dockerfile` がある場所）で実行します。エクスプローラーでフォルダを開き、
+アドレスバーに `cmd` と入力して Enter を押すと、そのフォルダでコマンドプロンプトが開きます。
+
 ### 1. イメージを作る（1回だけ）
+
+リポジトリのフォルダで次を実行します。
 
 ```bat
 docker build -t haas-asr:local .
@@ -173,7 +228,13 @@ docker volume rm haas-hf-cache
 
 ### トラブルシューティング
 
-- **`could not find a CUDA device` や `--gpus` に関するエラーが出る** — Docker Desktop の Settings → Resources → Advanced で GPU が有効になっているか、WSL の中で `nvidia-smi` が動くかを確認してください。`nvidia-smi` が動かない環境では使えません
+- **`could not find a CUDA device` や `--gpus` に関するエラーが出る** — Docker から GPU が見えていません。「0. 準備」の手順 4 のコマンドが動くか確かめてください。動かない場合は、次を順に確認します
+  - Windows の NVIDIA ドライバが新しいか（古いと CUDA 13.0 に対応していません）
+  - `wsl --update` で WSL が最新か
+  - Docker Desktop が「WSL 2 based engine」で動いているか（Settings → General）
+  - 上を直したら、Docker Desktop を再起動するか、`wsl --shutdown` を実行してから Docker Desktop を起動し直す
+- **`requirement error: unsatisfied condition: cuda>=12.8` のようなエラーが出る** — ドライバが古すぎます。NVIDIA のドライバを更新してください
+- **`docker` が見つからない / `Cannot connect to the Docker daemon` と出る** — Docker Desktop が起動していません。起動してから実行してください
 - **`Unable to find image 'haas-asr:local'` と出る** — イメージがまだありません。「1. イメージを作る」を実行してください
 - **`pwsh` が見つからないと出る** — PowerShell 7 をインストールしてください
 - **1回目の実行がとても遅い** — モデルの重み（Haas と話者分離モデル）をダウンロードしているためです。2回目からは保存済みのものを使います
@@ -234,7 +295,28 @@ Added here: a `Dockerfile` (the upstream repo ships none), Windows launchers (`h
 - **PowerShell 7 (`pwsh`)** for `haas.bat` and every wrapper except `run_browser.bat`.
 - Nothing else to install locally.
 
+### Setup (once)
+
+1. **NVIDIA driver on Windows.** Install a recent driver from [nvidia.com/drivers](https://www.nvidia.com/drivers/).
+   The image uses CUDA 13.0, so the driver must support it (the 580 series or newer, roughly); the author runs an
+   RTX 5070 Ti on driver 610.88. Do **not** install a driver or CUDA inside WSL — the Windows driver covers it.
+2. **WSL2.** In an administrator PowerShell, run `wsl --install` and reboot (or `wsl --update` if WSL is already there).
+3. **Docker Desktop.** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) with the WSL 2 based
+   engine (the default). It is free for personal use and small organisations; larger companies need a paid plan.
+   Its data lives on `C:` by default; this image alone takes tens of GB, so move it with Settings → Resources →
+   Advanced → Disk image location if `C:` is tight.
+4. **Check that Docker sees the GPU:**
+   ```bash
+   docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
+   ```
+   A table with your GPU and driver version means you are ready. If it fails, update the driver, run `wsl --update`,
+   then `wsl --shutdown` and restart Docker Desktop.
+5. **Get this repository** with `git clone https://github.com/bluefuji/haas-asr-windows-docker.git`, or
+   **Code → Download ZIP** on this page, and run the commands below in that folder.
+
 ### Build once
+
+In the repository folder:
 
 ```bash
 docker build -t haas-asr:local .
@@ -304,8 +386,8 @@ where they were not said more often. The `wrappers/` do not read `words.txt`.
 The model weights are kept in the named volume `haas-hf-cache` (everything else is inside the image, so these
 weights are the only runtime download); removing it forces a re-download.
 
-CPU-only hosts, missing GPU passthrough, and the first run's download time are the most common problems —
-see the 日本語 troubleshooting section for the checks.
+CPU-only hosts, missing GPU passthrough (step 4 of Setup fails), an outdated driver, and the first run's download
+time are the most common problems — see the 日本語 troubleshooting section for the checks.
 
 ### Not affiliated with Third Intelligence
 
