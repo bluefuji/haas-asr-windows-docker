@@ -26,12 +26,12 @@ Python も ffmpeg もインストールせず、`.bat` にファイルをドラ�
 |---|---|
 | GPU | **NVIDIA GPU** が必要です（Docker Desktop + WSL2 経由で使います）。CPU だけの PC や macOS では動きません。upstream の認識処理が Triton/CUDA を前提にしているためです |
 | ディスク | **数十 GB** の空きが必要です（CUDA 12.8 イメージ、PyTorch/NeMo などの依存、話者ラベル用の別環境、モデルの重み） |
-| PowerShell | **PowerShell 7（`pwsh`）が必要です。** `run_browser.bat` 以外の `.bat` は `pwsh` で動きます（`winget install Microsoft.PowerShell` でインストールできます） |
+| PowerShell | **PowerShell 7（`pwsh`）が必要です。** Windows に最初から入っている PowerShell 5.1 とは別物です（入れ方は「0. 準備」の手順 4） |
 | 不要なもの | Python / uv / ffmpeg / NeMo のインストール、Hugging Face へのログイン |
 
 ### 0. 準備（1回だけ）
 
-すでに Docker Desktop で GPU を使えている場合は、手順 4 の確認だけして「1. イメージを作る」へ進んでください。
+すでに Docker Desktop で GPU を使えている場合は、手順 4（PowerShell 7）と手順 5（GPU の確認）だけ済ませて、手順 6 へ進んでください。
 
 **1) NVIDIA のドライバを Windows に入れる**
 
@@ -44,7 +44,8 @@ Windows 用のドライバを入れれば、WSL2 からも GPU が使えるよ�
 
 **2) WSL2 を入れる**
 
-PowerShell を**管理者として実行**し、次のコマンドを実行してから、Windows を再起動します。
+スタートメニューで「PowerShell」を右クリック →**管理者として実行**で開き、次のコマンドを実行してから、Windows を再起動します
+（ここは Windows に最初から入っている PowerShell で構いません）。
 
 ```bat
 wsl --install
@@ -61,7 +62,23 @@ Docker Desktop は、個人や小規模な組織なら無料で使えますが�
 Docker のデータは、既定では C ドライブに保存されます。このイメージだけで数十 GB を使うので、C ドライブに余裕がない場合は
 Docker Desktop の Settings → Resources → Advanced → **Disk image location** で、保存先を別のドライブに変えておくと安心です。
 
-**4) Docker から GPU が見えるか確かめる**
+**4) PowerShell 7 を入れる**
+
+`haas.bat` と `wrappers/` の `.bat`（`run_browser.bat` 以外）は、**PowerShell 7（`pwsh`）**で動きます。
+Windows に最初から入っている「Windows PowerShell」（バージョン 5.1）とは別のソフトなので、入っていなければ追加でインストールします。
+
+```bat
+winget install --id Microsoft.PowerShell --source winget
+```
+
+`winget` が使えない場合は、Microsoft Store で「PowerShell」を検索してインストールしても構いません。
+インストールしたら、新しく開いたコマンドプロンプトで次を実行し、`7.` で始まるバージョンが表示されれば大丈夫です（作者の環境は 7.6.9）。
+
+```bat
+pwsh --version
+```
+
+**5) Docker から GPU が見えるか確かめる**
 
 Docker Desktop を起動した状態で、PowerShell かコマンドプロンプトで次を実行します。
 
@@ -71,9 +88,11 @@ docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
 
 GPU の名前やドライバのバージョンが入った表が出れば準備完了です。エラーになる場合は、下の「トラブルシューティング」を見てください。
 
-**5) このリポジトリを取ってくる**
+**6) このリポジトリを取ってくる**
 
 `git` を使っているなら clone します。使っていなければ、このページの緑色の **Code** ボタン → **Download ZIP** でダウンロードして展開してください。
+ZIP で取ってきた場合、`.bat` を開くたびに「セキュリティの警告」が出ることがあります。気になるときは、展開する**前に**
+ZIP ファイルを右クリック →「プロパティ」→ 下の方の「許可する」にチェックを入れて OK を押してから展開してください。
 
 ```bat
 git clone https://github.com/bluefuji/haas-asr-windows-docker.git
@@ -228,7 +247,7 @@ docker volume rm haas-hf-cache
 
 ### トラブルシューティング
 
-- **`could not find a CUDA device` や `--gpus` に関するエラーが出る** — Docker から GPU が見えていません。「0. 準備」の手順 4 のコマンドが動くか確かめてください。動かない場合は、次を順に確認します
+- **`could not find a CUDA device` や `--gpus` に関するエラーが出る** — Docker から GPU が見えていません。「0. 準備」の手順 5 のコマンドが動くか確かめてください。動かない場合は、次を順に確認します
   - Windows の NVIDIA ドライバが新しいか（古いと CUDA 13.0 に対応していません）
   - `wsl --update` で WSL が最新か
   - Docker Desktop が「WSL 2 based engine」で動いているか（Settings → General）
@@ -236,7 +255,7 @@ docker volume rm haas-hf-cache
 - **`requirement error: unsatisfied condition: cuda>=12.8` のようなエラーが出る** — ドライバが古すぎます。NVIDIA のドライバを更新してください
 - **`docker` が見つからない / `Cannot connect to the Docker daemon` と出る** — Docker Desktop が起動していません。起動してから実行してください
 - **`Unable to find image 'haas-asr:local'` と出る** — イメージがまだありません。「1. イメージを作る」を実行してください
-- **`pwsh` が見つからないと出る** — PowerShell 7 をインストールしてください
+- **「PowerShell 7 (pwsh) が見つかりません」や「'pwsh.exe' は、内部コマンドまたは外部コマンド…として認識されていません」と出る** — PowerShell 7 が入っていません。「0. 準備」の手順 4 でインストールしてください。インストール直後は、開いていたウィンドウを閉じてから `.bat` を起動し直してください
 - **1回目の実行がとても遅い** — モデルの重み（Haas と話者分離モデル）をダウンロードしているためです。2回目からは保存済みのものを使います
 - **フォルダ一括で一部のファイルだけ失敗した** — 失敗したファイルの `.txt` は作られず、最後に理由と成功・失敗・スキップの件数が表示されます。成功したファイルの結果は残ります
 - **フォルダ一括が書き込みエラーで止まる** — 結果の `.txt` は音声と同じフォルダに書き込みます。読み取り専用のフォルダ（共有フォルダなど）では使えないので、書き込めるフォルダにコピーしてから実行してください
@@ -305,14 +324,19 @@ Added here: a `Dockerfile` (the upstream repo ships none), Windows launchers (`h
    engine (the default). It is free for personal use and small organisations; larger companies need a paid plan.
    Its data lives on `C:` by default; this image alone takes tens of GB, so move it with Settings → Resources →
    Advanced → Disk image location if `C:` is tight.
-4. **Check that Docker sees the GPU:**
+4. **PowerShell 7.** `haas.bat` and the wrappers (except `run_browser.bat`) run on PowerShell 7 (`pwsh`), which is
+   separate from the Windows PowerShell 5.1 that ships with Windows. Install it with
+   `winget install --id Microsoft.PowerShell --source winget` (or from the Microsoft Store), then check that
+   `pwsh --version` prints `7.x` in a new terminal (the author uses 7.6.9).
+5. **Check that Docker sees the GPU:**
    ```bash
    docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
    ```
    A table with your GPU and driver version means you are ready. If it fails, update the driver, run `wsl --update`,
    then `wsl --shutdown` and restart Docker Desktop.
-5. **Get this repository** with `git clone https://github.com/bluefuji/haas-asr-windows-docker.git`, or
-   **Code → Download ZIP** on this page, and run the commands below in that folder.
+6. **Get this repository** with `git clone https://github.com/bluefuji/haas-asr-windows-docker.git`, or
+   **Code → Download ZIP** on this page, and run the commands below in that folder. If you use the ZIP, unblock it
+   first (right-click → Properties → Unblock) to avoid a security prompt every time you open a `.bat`.
 
 ### Build once
 
@@ -386,7 +410,7 @@ where they were not said more often. The `wrappers/` do not read `words.txt`.
 The model weights are kept in the named volume `haas-hf-cache` (everything else is inside the image, so these
 weights are the only runtime download); removing it forces a re-download.
 
-CPU-only hosts, missing GPU passthrough (step 4 of Setup fails), an outdated driver, and the first run's download
+CPU-only hosts, missing PowerShell 7, missing GPU passthrough (step 5 of Setup fails), an outdated driver, and the first run's download
 time are the most common problems — see the 日本語 troubleshooting section for the checks.
 
 ### Not affiliated with Third Intelligence
