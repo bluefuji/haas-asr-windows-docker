@@ -25,7 +25,7 @@ Python も ffmpeg もインストールせず、`.bat` にファイルをドラ�
 | 項目 | 内容 |
 |---|---|
 | GPU | **NVIDIA GPU** が必要です（Docker Desktop + WSL2 経由で使います）。CPU だけの PC や macOS では動きません。upstream の認識処理が Triton/CUDA を前提にしているためです |
-| ディスク | **数十 GB** の空きが必要です（CUDA のベースイメージ、PyTorch/NeMo などの依存、話者ラベル用の別環境、モデルの重み） |
+| ディスク | **30 GB 以上**の空きが必要です（CUDA のベースイメージ、PyTorch/NeMo などの依存、話者ラベル用の別環境、モデルの重み）。作者の環境ではイメージが 29.9 GB、モデルの重みが 1.4 GB で、ビルド中は一時的にさらに使います |
 | PowerShell | **PowerShell 7（`pwsh`）が必要です。** Windows に最初から入っている PowerShell 5.1 とは別物です（入れ方は「0. 準備」の手順 4） |
 | 不要なもの | Python / uv / ffmpeg / NeMo のインストール、Hugging Face へのログイン |
 
@@ -115,7 +115,7 @@ docker build -t haas-asr:local .
 
 ビルドには時間がかかります。本体の環境に加えて、話者ラベル用とブラウザデモ用の環境もここで作るためです。
 
-upstream は tag を付けていないので、[Dockerfile](Dockerfile) では動作を確認した commit `acc614f` に固定しています
+upstream は tag を付けていないので、[Dockerfile](Dockerfile) では動作を確認した commit `acc614f`（2026-11-01 時点の最新）に固定しています
 （uv のバージョンも固定しています）。upstream の最新版を使いたいときは、次のようにビルドします。
 
 ```bat
@@ -217,15 +217,31 @@ upstream の話者分離モデル（Nemotron-3-Diarization）で「誰がいつ�
 
 ### VRAM が足りないとき
 
-一度に処理する区間の数（batch size）は 64 にしています。作者の環境では 8 より 64 のほうが良い結果でしたが、
-VRAM の少ない GPU ではメモリ不足（out of memory）で止まることがあります。その場合は `16` や `8` に下げてください。
+一度に処理する区間の数（batch size）は 64 にしています。VRAM の少ない GPU ではメモリ不足（out of memory）で
+止まることがあるので、その場合は `16` や `8` に下げてください。
+
+batch size は一度にまとめて処理する量を変えるだけなので、上げても下げても、推論の精度そのものは変わらないはずです。
+
+70 分の動画で batch size を変えて測った VRAM の使用量（最大）です（作者の環境、処理していないときからの増加分）。
+
+| batch size | 時刻付き | 話者ラベル付き |
+|---|---|---|
+| 64（既定） | 約 14.6 GB | 約 5.0 GB |
+| 32 | 約 9.2 GB | — |
+| 16 | 約 7.3 GB | 約 4.5 GB |
+| 8 | 約 6.0 GB | — |
+
+- 処理時間はどの batch size でもほぼ同じでした（時刻付きで約 46〜47 秒、話者ラベル付きで約 65〜67 秒）
+- batch size を下げても、モデル本体のぶん（約 5 GB）は必要です
+- 測ったのは VRAM 16 GB の GPU だけです。PyTorch は空いている VRAM を多めに確保することがあるので、
+  VRAM の少ない GPU ではこれより少なく済む可能性もありますが、試してはいません
 
 - 統合版: [scripts/haas.ps1](scripts/haas.ps1) の先頭にある `[int]$BatchSize = 64` を書き換える（時刻付き・話者ラベル付きの両方に効きます）
 - 個別版: 使っている `.ps1`（`wrappers/run_file_batch64.ps1` / `run_folder_batch64.ps1` / `run_speakers.ps1` / `run_folder_with_speakers.ps1`）の中の `--batch-size 64` を書き換える
 
 時刻付きの区間の長さ（統合版の `$ChunkSeconds`、個別版 `run_file_batch64.ps1` / `run_folder_batch64.ps1` の `--chunk-seconds`）も同じ場所で変えられます。
 
-なお upstream の説明によると、batch size を変えると、判定が僅差の箇所で数文字変わることがあります。
+ただし upstream の説明によると、batch size を変えると、判定が僅差の箇所で数文字変わることがあります。
 
 ### カスタム語彙（人名・作品名などを正しく書かせる）
 
@@ -253,7 +269,7 @@ Haas=ハース
 
 ### キャッシュ
 
-Hugging Face から取得したモデルの重み（Haas と話者分離モデル、合わせて数 GB）は、毎回ダウンロードし直さなくて済むよう
+Hugging Face から取得したモデルの重み（Haas と話者分離モデル、合わせて約 1.4 GB）は、毎回ダウンロードし直さなくて済むよう
 Docker volume `haas-hf-cache` に保存しています。プログラムやライブラリはすべてイメージの中にあるので、
 実行時にダウンロードするのはこの重みだけです。
 
@@ -334,9 +350,34 @@ LICENSE / NOTICE             Apache-2.0 と出所の表記
 
 `scripts/` の `.py` は Windows で直接実行するものではありません。`docker run` のときにコンテナへ渡して使います。
 
+### 動作確認した環境
+
+| 項目 | 内容 |
+|---|---|
+| OS | Windows 11 Home（ビルド 26200） |
+| CPU / メモリ | AMD Ryzen 7 9700X / 64 GB |
+| GPU | NVIDIA GeForce RTX 5070 Ti（VRAM 16 GB）、ドライバ 610.88 |
+| ソフト | Docker Engine 29.5.3（Docker Desktop）、PowerShell 7.6.9 |
+| upstream | commit `acc614f`（2026-11-01 時点の最新） |
+
+`haas.bat` で処理したときの例です（batch size 64、モデルの重みはダウンロード済み）。
+
+| 入力 | モード | 処理時間 | VRAM の使用量（最大） |
+|---|---|---|---|
+| 音声 7 分 32 秒（WAV、48 kHz ステレオ） | 時刻付き | 約 25 秒 | 約 6.3 GB |
+| 〃 | 話者ラベル付き | 約 45 秒 | 約 6.2 GB |
+| 動画 70 分 7 秒（MP4、720p、1.3 GB） | 時刻付き | 約 47 秒 | 約 14.6 GB |
+| 〃 | 話者ラベル付き | 約 67 秒 | 約 5.0 GB |
+
+- 処理時間は起動から終了までで、毎回のコンテナの起動とモデルの読み込みを含みます。認識そのものは、時刻付きで 7 分の音声が約 7 秒、70 分の動画が約 9 秒でした
+- VRAM は、処理していないとき（画面表示などで 0.7〜0.8 GB）から増えた分です
+- 時刻付きは約 30 秒ごとの区間を最大 64 個まとめて処理するので、長い入力ほど VRAM を使います。70 分の動画では 16 GB の
+  ほぼ上限まで使っていました。batch size を下げると減ります（8 で約 6.0 GB。「[VRAM が足りないとき](#vram-が足りないとき)」を参照）
+- 2 本の入力で測った目安です
+
 ### 作者メモ
 
-もともと自分用に作ったものを公開しています。動作確認は作者の環境（Windows 11 + NVIDIA GPU）でしかしていません。
+もともと自分用に作ったものを公開しています。動作確認は作者の環境（上の「動作確認した環境」）でしかしていません。
 
 - 体感では、Whisper よりかなり精度が良いです
 - 一人だけが話しているバイノーラル音声なら、これに読み込ませてモノラルに変換する処理で問題なく認識できます
@@ -359,7 +400,8 @@ Added here: a `Dockerfile` (the upstream repo ships none), Windows launchers (`h
 
 - **NVIDIA GPU** on Windows via Docker Desktop (WSL2 GPU passthrough). **CPU-only and macOS are not supported** —
   the decoder's attention kernels need Triton and CUDA, which is an upstream requirement.
-- **Tens of GB** of free disk (CUDA base image, PyTorch/NeMo dependencies, model weights, the speaker-label environment).
+- **30 GB or more** of free disk (CUDA base image, PyTorch/NeMo dependencies, model weights, the speaker-label
+  environment). On the author's machine the image is 29.9 GB and the weights 1.4 GB, plus temporary space during the build.
 - **PowerShell 7 (`pwsh`)** for `haas.bat` and every wrapper except `run_browser.bat`.
 - Nothing else to install locally.
 
@@ -399,7 +441,7 @@ docker build -t haas-asr:local .
 ```
 
 The build also creates the speaker-label and browser-demo environments. The default pins a verified upstream
-commit (the upstream repo has no tags) and a fixed uv version. Follow upstream with `--build-arg HAAS_REF=main`,
+commit, `acc614f` (upstream `main` as of 2026-11-01; the upstream repo has no tags), and a fixed uv version. Follow upstream with `--build-arg HAAS_REF=main`,
 then try the speaker-label mode once: the folder version imports functions from the upstream example
 `examples/speakers/transcribe_with_speakers.py`, which upstream may change.
 
@@ -458,8 +500,11 @@ with the turn's start, speakers numbered in order of appearance:
 ```
 
 Out of memory? Lower the batch size to `16` or `8`: `[int]$BatchSize = 64` at the top of `scripts/haas.ps1`
-(both modes), or `--batch-size 64` in the `wrappers/*.ps1` you use. 64 gave the author better results
-than 8, but it needs more VRAM. The timestamped chunk length (`$ChunkSeconds`, or `--chunk-seconds` in
+(both modes), or `--batch-size 64` in the `wrappers/*.ps1` you use. The batch size only changes how
+many chunks run at once, so accuracy should not change either way (upstream notes that a few characters can differ
+where the decision is close). Larger batches need more VRAM: on the 70-minute sample the timestamp mode peaked at about 14.6 / 9.2 / 7.3 /
+6.0 GB above idle with batch size 64 / 32 / 16 / 8 (speaker labels: 5.0 GB at 64, 4.5 GB at 16), with almost the
+same run time. Measured on a 16 GB card only. The timestamped chunk length (`$ChunkSeconds`, or `--chunk-seconds` in
 `run_file_batch64.ps1` / `run_folder_batch64.ps1`) is set in the same places.
 
 **Custom vocabulary:** copy [words.example.txt](words.example.txt) to `words.txt` next to `haas.bat` and list one
@@ -482,6 +527,20 @@ CPU-only hosts, missing PowerShell 7, missing GPU passthrough (step 5 of Setup f
 (`The NVIDIA driver on your system is too old`), paths containing a comma (`invalid field … must be a key=value
 pair`; rename or move the file), and the first run's download time are the most common problems — see the 日本語
 troubleshooting section for the checks.
+
+### Tested on
+
+Windows 11 Home (build 26200), Ryzen 7 9700X, 64 GB RAM, RTX 5070 Ti (16 GB VRAM, driver 610.88), Docker Engine
+29.5.3, PowerShell 7.6.9, upstream `acc614f`. With batch size 64 and the weights already cached, timings include
+container start-up and model loading on every run, and VRAM is measured above idle:
+
+| Input | Timestamps | Speaker labels |
+|---|---|---|
+| 7 min 32 s WAV (48 kHz stereo) | ~25 s, ~6.3 GB VRAM | ~45 s, ~6.2 GB VRAM |
+| 70 min 7 s MP4 (720p, 1.3 GB) | ~47 s, ~14.6 GB VRAM | ~67 s, ~5.0 GB VRAM |
+
+The timestamp mode batches up to 64 thirty-second chunks, so long inputs use nearly all of a 16 GB card; batch size 8
+brings that down to about 6.0 GB (see "Out of memory?" above). Two samples only.
 
 ### Not affiliated with Third Intelligence
 
