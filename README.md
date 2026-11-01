@@ -25,7 +25,7 @@ Python も ffmpeg もインストールせず、`.bat` にファイルをドラ�
 | 項目 | 内容 |
 |---|---|
 | GPU | **NVIDIA GPU** が必要です（Docker Desktop + WSL2 経由で使います）。CPU だけの PC や macOS では動きません。upstream の認識処理が Triton/CUDA を前提にしているためです |
-| ディスク | **数十 GB** の空きが必要です（CUDA 12.8 イメージ、PyTorch/NeMo などの依存、話者ラベル用の別環境、モデルの重み） |
+| ディスク | **数十 GB** の空きが必要です（CUDA のベースイメージ、PyTorch/NeMo などの依存、話者ラベル用の別環境、モデルの重み） |
 | PowerShell | **PowerShell 7（`pwsh`）が必要です。** Windows に最初から入っている PowerShell 5.1 とは別物です（入れ方は「0. 準備」の手順 4） |
 | 不要なもの | Python / uv / ffmpeg / NeMo のインストール、Hugging Face へのログイン |
 
@@ -36,7 +36,8 @@ Python も ffmpeg もインストールせず、`.bat` にファイルをドラ�
 **1) NVIDIA のドライバを Windows に入れる**
 
 [NVIDIA のドライバのページ](https://www.nvidia.com/drivers/) から、お使いの GPU 向けの最新ドライバを Windows にインストールします。
-このイメージは CUDA 13.0 を使うので、**それに対応した新しいドライバ（580 番台以降が目安）**が必要です。
+このイメージに入る PyTorch は CUDA 13.0 を使うので、**それに対応した新しいドライバ（580 番台以降が目安）**が必要です
+（ベースイメージは CUDA 12.8 ですが、PyTorch が CUDA 13.0 の部品を同梱しています）。
 作者の環境は GeForce RTX 5070 Ti + ドライバ 610.88 です。
 
 Windows 用のドライバを入れれば、WSL2 からも GPU が使えるようになります。
@@ -86,7 +87,10 @@ Docker Desktop を起動した状態で、PowerShell かコマンドプロンプ
 docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
 ```
 
-GPU の名前やドライバのバージョンが入った表が出れば準備完了です。エラーになる場合は、下の「トラブルシューティング」を見てください。
+GPU の名前やドライバのバージョンが入った表が出て、表の右上の **`CUDA Version` が 13.0 以上**なら準備完了です。
+この確認用のイメージは CUDA 12.8 なので、ドライバが 570 番台でも表は出ますが、その場合は実際に使うときにエラーになります。
+`CUDA Version` が 13.0 より小さいときは、手順 1 に戻ってドライバを更新してください。
+エラーになる場合は、下の「トラブルシューティング」を見てください。
 
 **6) このリポジトリを取ってくる**
 
@@ -133,14 +137,25 @@ upstream がそのファイルを書き換えると動かなくなることが�
   3) ブラウザデモ
 ```
 
+ドラッグできるのは 1 つだけです。複数のファイルをまとめてドラッグしても、処理されるのは最初の 1 つだけなので、
+複数あるときは 1 つのフォルダに入れて、そのフォルダを渡してください。
+
+結果は、**元のファイル名（拡張子も含む）の後ろに `.txt` か `.speakers.txt` を付けた名前**で保存されます。
+
 | 選択 | ファイルを渡したとき | フォルダを渡したとき |
 |---|---|---|
-| 1) 時刻付き | 同じ場所に `元のファイル名.txt`（既存なら上書き） | 各音声の隣に `元のファイル名.txt`（既存ならスキップ） |
-| 2) 話者ラベル付き | 同じ場所に `元のファイル名.speakers.txt`（既存なら上書き） | 各音声の隣に `元のファイル名.speakers.txt`（既存ならスキップ） |
+| 1) 時刻付き | 同じ場所に `会議.mp4.txt`（既存なら上書き） | 各音声の隣に `会議.mp4.txt` の形で（既存ならスキップ） |
+| 2) 話者ラベル付き | 同じ場所に `会議.mp4.speakers.txt`（既存なら上書き） | 各音声の隣に `会議.mp4.speakers.txt` の形で（既存ならスキップ） |
+
+フォルダを渡したときに処理するのは、**そのフォルダの直下にあるファイルだけ**です。サブフォルダの中は処理しません。
 
 **3) ブラウザデモ**を選ぶと、ファイルを渡す必要はなく、少し待つと `http://localhost:7860/longform` がブラウザで開きます。
 音声をアップロードして文字起こししたり、マイクの音声にリアルタイムで字幕を付けたりできます。
 終了するときは、黒い画面で `Ctrl+C` を押してください。
+
+ブラウザは起動から 10 秒後に開きますが、サーバーはモデルを読み込み終わるまで応答しません（初回は重みのダウンロードもあります）。
+「このサイトにアクセスできません」のような画面が出たら、黒い画面に `Ready on …: http://0.0.0.0:7860` と表示されるのを待ってから、
+ページを再読み込みしてください。
 
 ### 2'. 使う（個別版 `wrappers/`）
 
@@ -148,11 +163,14 @@ upstream がそのファイルを書き換えると動かなくなることが�
 
 | 目的 | 起動 | 出力 |
 |---|---|---|
-| 1本の音声・動画 | `wrappers/run_file_batch64.bat` にファイルをドラッグ | 同じ場所に `元のファイル名.txt`（既存なら上書き） |
-| フォルダ一括 | `wrappers/run_folder_batch64.bat` を起動し、フォルダパスを入力 | 各音声の隣に `元のファイル名.txt`（既存ならスキップ） |
-| 話者ラベル付き（1本） | `wrappers/run_speakers.bat` にファイルをドラッグ | 同じ場所に `元のファイル名.txt`（`Speaker 1: …` 形式、既存なら上書き） |
-| 話者ラベル付き（フォルダ一括） | `wrappers/run_folder_with_speakers.bat` を起動し、フォルダパスを入力 | 各音声の隣に `元のファイル名.speakers.txt`（既存ならスキップ） |
+| 1本の音声・動画 | `wrappers/run_file_batch64.bat` にファイルをドラッグ | 同じ場所に `会議.mp4.txt`（既存なら上書き） |
+| フォルダ一括 | `wrappers/run_folder_batch64.bat` を起動し、フォルダパスを入力 | 各音声の隣に `会議.mp4.txt` の形で（既存ならスキップ） |
+| 話者ラベル付き（1本） | `wrappers/run_speakers.bat` にファイルをドラッグ | 同じ場所に `会議.mp4.speakers.txt`（既存なら上書き） |
+| 話者ラベル付き（フォルダ一括） | `wrappers/run_folder_with_speakers.bat` を起動し、フォルダパスを入力 | 各音声の隣に `会議.mp4.speakers.txt` の形で（既存ならスキップ） |
 | ブラウザデモ | `wrappers/run_browser.bat` | `http://localhost:7860/longform` が自動で開きます |
+
+ドラッグできるのが 1 つだけなこと、フォルダ一括がサブフォルダの中を処理しないこと、ブラウザデモで再読み込みが必要になることがあるのは、
+統合版と同じです。
 
 `.bat` をデスクトップに置きたいときは、コピーではなく**ショートカット**を作ってください。
 `.bat` は自分と同じフォルダにある `.ps1` を探すので、コピーすると動きません。
@@ -181,7 +199,7 @@ upstream がそのファイルを書き換えると動かなくなることが�
 （時刻は `[00:00:30]` の形式になります。スクリプトを直接使う場合は `--split fixed` です）。
 
 ```bat
-pwsh -NoProfile -File scripts\haas.ps1 -Mode timestamp -Split fixed "C:\path\to\audio.mp4"
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\haas.ps1 -Mode timestamp -Split fixed "C:\path\to\audio.mp4"
 ```
 
 **話者ラベル付き**
@@ -203,9 +221,9 @@ upstream の話者分離モデル（Nemotron-3-Diarization）で「誰がいつ�
 VRAM の少ない GPU ではメモリ不足（out of memory）で止まることがあります。その場合は `16` や `8` に下げてください。
 
 - 統合版: [scripts/haas.ps1](scripts/haas.ps1) の先頭にある `[int]$BatchSize = 64` を書き換える（時刻付き・話者ラベル付きの両方に効きます）
-- 個別版: `wrappers/run_file_batch64.ps1` / `wrappers/run_folder_batch64.ps1` の中の `--batch-size 64` を書き換える
+- 個別版: 使っている `.ps1`（`wrappers/run_file_batch64.ps1` / `run_folder_batch64.ps1` / `run_speakers.ps1` / `run_folder_with_speakers.ps1`）の中の `--batch-size 64` を書き換える
 
-区間の長さ（統合版の `$ChunkSeconds`、個別版の `--chunk-seconds`）も同じ場所で変えられます。
+時刻付きの区間の長さ（統合版の `$ChunkSeconds`、個別版 `run_file_batch64.ps1` / `run_folder_batch64.ps1` の `--chunk-seconds`）も同じ場所で変えられます。
 
 なお upstream の説明によると、batch size を変えると、判定が僅差の箇所で数文字変わることがあります。
 
@@ -245,6 +263,33 @@ Docker volume `haas-hf-cache` に保存しています。プログラムやラ�
 docker volume rm haas-hf-cache
 ```
 
+### 更新するとき
+
+`git pull`（ZIP の場合は新しい ZIP を展開し直す）でこのリポジトリを更新したとき、`haas.bat`・`wrappers/`・`scripts/` の変更は、
+次の実行からそのまま使われます（スクリプトは実行のたびにコンテナへ渡しているためです）。
+**`Dockerfile` が変わったときだけ**、「1. イメージを作る」の `docker build` をもう一度実行してください。
+
+ZIP で更新する場合、自分で作った `words.txt` は新しいフォルダにコピーし直してください。
+
+### すべて削除するとき
+
+イメージ本体（数十 GB）、モデルの重み、「0. 準備」の手順 5 で使った確認用のイメージは、次のコマンドで消せます。
+
+```bat
+docker image rm haas-asr:local
+docker volume rm haas-hf-cache
+docker image rm nvidia/cuda:12.8.1-base-ubuntu24.04
+```
+
+ビルドの途中経過（ビルドキャッシュ）も残っているので、続けて次を実行します（確認が出たら `y`）。
+**使われていないビルドキャッシュをすべて消すので、他のプロジェクトのビルドキャッシュも一緒に消えます。**
+
+```bat
+docker builder prune -a
+```
+
+最後にリポジトリのフォルダを削除すれば終わりです。
+
 ### トラブルシューティング
 
 - **`could not find a CUDA device` や `--gpus` に関するエラーが出る** — Docker から GPU が見えていません。「0. 準備」の手順 5 のコマンドが動くか確かめてください。動かない場合は、次を順に確認します
@@ -253,10 +298,14 @@ docker volume rm haas-hf-cache
   - Docker Desktop が「WSL 2 based engine」で動いているか（Settings → General）
   - 上を直したら、Docker Desktop を再起動するか、`wsl --shutdown` を実行してから Docker Desktop を起動し直す
 - **`requirement error: unsatisfied condition: cuda>=12.8` のようなエラーが出る** — ドライバが古すぎます。NVIDIA のドライバを更新してください
+- **`The NVIDIA driver on your system is too old` と出る** — ドライバが CUDA 13.0 に対応していません（580 番台より前）。「0. 準備」の手順 5 の確認が通っていても起こります。NVIDIA のドライバを更新してください
 - **`docker` が見つからない / `Cannot connect to the Docker daemon` と出る** — Docker Desktop が起動していません。起動してから実行してください
 - **`Unable to find image 'haas-asr:local'` と出る** — イメージがまだありません。「1. イメージを作る」を実行してください
 - **「PowerShell 7 (pwsh) が見つかりません」や「'pwsh.exe' は、内部コマンドまたは外部コマンド…として認識されていません」と出る** — PowerShell 7 が入っていません。「0. 準備」の手順 4 でインストールしてください。インストール直後は、開いていたウィンドウを閉じてから `.bat` を起動し直してください
 - **1回目の実行がとても遅い** — モデルの重み（Haas と話者分離モデル）をダウンロードしているためです。2回目からは保存済みのものを使います
+- **`invalid field '…' must be a key=value pair` と出てすぐ止まる** — ファイル名かフォルダのパスにカンマ（`,`）が入っています。このラッパーはカンマを含むパスを Docker に渡せないので、名前からカンマを消すか、カンマのない場所にコピーしてから実行してください
+- **ブラウザデモで「このサイトにアクセスできません」と出る** — サーバーの準備がまだ終わっていません。黒い画面に `Ready on …` と表示されてから、ページを再読み込みしてください
+- **フォルダ一括で「対応する音声・動画ファイルがありません」と出る** — 処理するのはフォルダ直下のファイルだけです。サブフォルダの中にあるときは、そのサブフォルダを渡してください
 - **フォルダ一括で一部のファイルだけ失敗した** — 失敗したファイルの `.txt` は作られず、最後に理由と成功・失敗・スキップの件数が表示されます。成功したファイルの結果は残ります
 - **フォルダ一括が書き込みエラーで止まる** — 結果の `.txt` は音声と同じフォルダに書き込みます。読み取り専用のフォルダ（共有フォルダなど）では使えないので、書き込めるフォルダにコピーしてから実行してください
 - **作り直したい** — フォルダ一括は、`.txt` がすでにあるファイルを飛ばします。作り直したいファイルの `.txt` を削除してから実行してください
@@ -270,7 +319,7 @@ Dockerfile                   イメージの定義（upstream を commit 固定�
 scripts/
   haas.ps1                   統合ランチャーの本体
   transcribe_timestamped.py  1本の音声を静かな位置で区切り、時刻付きテキストを出力
-  transcribe_folder.py       上のフォルダ一括版（動画の変換・サブフォルダ・スキップ・成功/失敗の集計）
+  transcribe_folder.py       上のフォルダ一括版（動画の変換・スキップ・成功/失敗の集計）
   transcribe_folder_with_speakers.py
                              フォルダ内一括の話者ラベル付き版（upstream の speakers 例の関数を使い、
                              モデルは最初に1回だけ読み込む）
@@ -310,15 +359,16 @@ Added here: a `Dockerfile` (the upstream repo ships none), Windows launchers (`h
 
 - **NVIDIA GPU** on Windows via Docker Desktop (WSL2 GPU passthrough). **CPU-only and macOS are not supported** —
   the decoder's attention kernels need Triton and CUDA, which is an upstream requirement.
-- **Tens of GB** of free disk (CUDA 12.8 image, PyTorch/NeMo dependencies, model weights, the speaker-label environment).
+- **Tens of GB** of free disk (CUDA base image, PyTorch/NeMo dependencies, model weights, the speaker-label environment).
 - **PowerShell 7 (`pwsh`)** for `haas.bat` and every wrapper except `run_browser.bat`.
 - Nothing else to install locally.
 
 ### Setup (once)
 
 1. **NVIDIA driver on Windows.** Install a recent driver from [nvidia.com/drivers](https://www.nvidia.com/drivers/).
-   The image uses CUDA 13.0, so the driver must support it (the 580 series or newer, roughly); the author runs an
-   RTX 5070 Ti on driver 610.88. Do **not** install a driver or CUDA inside WSL — the Windows driver covers it.
+   PyTorch in the image ships CUDA 13.0 (the base image is CUDA 12.8), so the driver must support 13.0 (the 580
+   series or newer, roughly); the author runs an RTX 5070 Ti on driver 610.88. Do **not** install a driver or
+   CUDA inside WSL — the Windows driver covers it.
 2. **WSL2.** In an administrator PowerShell, run `wsl --install` and reboot (or `wsl --update` if WSL is already there).
 3. **Docker Desktop.** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) with the WSL 2 based
    engine (the default). It is free for personal use and small organisations; larger companies need a paid plan.
@@ -332,8 +382,10 @@ Added here: a `Dockerfile` (the upstream repo ships none), Windows launchers (`h
    ```bash
    docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
    ```
-   A table with your GPU and driver version means you are ready. If it fails, update the driver, run `wsl --update`,
-   then `wsl --shutdown` and restart Docker Desktop.
+   A table with your GPU and driver version, with **`CUDA Version` 13.0 or higher** in its top-right corner, means
+   you are ready. This test image only needs CUDA 12.8, so a 570-series driver still prints the table but fails
+   at run time; update the driver if `CUDA Version` is below 13.0. If the command fails, update the driver, run
+   `wsl --update`, then `wsl --shutdown` and restart Docker Desktop.
 6. **Get this repository** with `git clone https://github.com/bluefuji/haas-asr-windows-docker.git`, or
    **Code → Download ZIP** on this page, and run the commands below in that folder. If you use the ZIP, unblock it
    first (right-click → Properties → Unblock) to avoid a security prompt every time you open a `.bat`.
@@ -355,21 +407,28 @@ then try the speaker-label mode once: the folder version imports functions from 
 
 **All-in-one:** drag an audio/video file **or a folder** onto `haas.bat` (or double-click it and type a path),
 then pick `1` timestamped transcript, `2` speaker labels, or `3` browser demos.
+Drop one item at a time: if you drop several files, only the first is processed, so put them in a folder instead.
+Outputs keep the full original name, extension included, plus `.txt` or `.speakers.txt`.
 
 | Choice | Given a file | Given a folder |
 |---|---|---|
-| 1) Timestamped | `<original name>.txt` next to it (overwritten) | `<original name>.txt` beside each file (existing ones skipped) |
-| 2) Speaker labels | `<original name>.speakers.txt` next to it (overwritten) | `<original name>.speakers.txt` beside each file (existing ones skipped) |
+| 1) Timestamped | `meeting.mp4.txt` next to it (overwritten) | `meeting.mp4.txt` and so on beside each file (existing ones skipped) |
+| 2) Speaker labels | `meeting.mp4.speakers.txt` next to it (overwritten) | `meeting.mp4.speakers.txt` and so on beside each file (existing ones skipped) |
 | 3) Browser demos | opens `http://localhost:7860/longform` | — |
+
+Folders are not searched recursively: only the files directly inside are processed.
+
+The browser opens 10 s after launch, but the server answers only once the model is loaded (and, on the first
+run, downloaded). If the page does not load, wait for `Ready on …: http://0.0.0.0:7860` in the console and reload.
 
 **One `.bat` per task** (no menu) lives in `wrappers/`:
 
 | Task | Start | Output |
 |---|---|---|
-| One file | drag it onto `wrappers/run_file_batch64.bat` | `<original name>.txt` next to the input (overwritten) |
-| Whole folder | `wrappers/run_folder_batch64.bat`, then type a folder path | `<original name>.txt` beside each file (existing ones are skipped) |
-| Speaker labels, one file | drag onto `wrappers/run_speakers.bat` | `<original name>.txt` with `Speaker 1: …` lines (overwritten) |
-| Speaker labels, whole folder | `wrappers/run_folder_with_speakers.bat`, then type a folder path | `<original name>.speakers.txt` beside each file (existing ones are skipped) |
+| One file | drag it onto `wrappers/run_file_batch64.bat` | `meeting.mp4.txt` next to the input (overwritten) |
+| Whole folder | `wrappers/run_folder_batch64.bat`, then type a folder path | `meeting.mp4.txt` and so on beside each file (existing ones are skipped) |
+| Speaker labels, one file | drag onto `wrappers/run_speakers.bat` | `meeting.mp4.speakers.txt` next to the input (overwritten) |
+| Speaker labels, whole folder | `wrappers/run_folder_with_speakers.bat`, then type a folder path | `meeting.mp4.speakers.txt` and so on beside each file (existing ones are skipped) |
 | Browser demos | `wrappers/run_browser.bat` | opens `http://localhost:7860/longform` |
 
 To put a launcher on the desktop, create a shortcut rather than copying the `.bat`: each one looks for its
@@ -399,8 +458,9 @@ with the turn's start, speakers numbered in order of appearance:
 ```
 
 Out of memory? Lower the batch size to `16` or `8`: `[int]$BatchSize = 64` at the top of `scripts/haas.ps1`
-(both modes), or `--batch-size 64` in `wrappers/run_*_batch64.ps1`. 64 gave the author better results
-than 8, but it needs more VRAM. `--chunk-seconds` is in the same place.
+(both modes), or `--batch-size 64` in the `wrappers/*.ps1` you use. 64 gave the author better results
+than 8, but it needs more VRAM. The timestamped chunk length (`$ChunkSeconds`, or `--chunk-seconds` in
+`run_file_batch64.ps1` / `run_folder_batch64.ps1`) is set in the same places.
 
 **Custom vocabulary:** copy [words.example.txt](words.example.txt) to `words.txt` next to `haas.bat` and list one
 word per line as `written form=reading,reading` (readings optional, hiragana or katakana). `haas.bat` then boosts
@@ -410,8 +470,18 @@ where they were not said more often. The `wrappers/` do not read `words.txt`.
 The model weights are kept in the named volume `haas-hf-cache` (everything else is inside the image, so these
 weights are the only runtime download); removing it forces a re-download.
 
-CPU-only hosts, missing PowerShell 7, missing GPU passthrough (step 5 of Setup fails), an outdated driver, and the first run's download
-time are the most common problems — see the 日本語 troubleshooting section for the checks.
+**Updating:** after `git pull` (or unpacking a newer ZIP — copy your `words.txt` over), changes to `haas.bat`,
+`wrappers/` and `scripts/` apply on the next run, since the scripts are mounted into the container each time.
+Rebuild the image only when the `Dockerfile` changes.
+
+**Removing everything:** `docker image rm haas-asr:local`, `docker volume rm haas-hf-cache` and
+`docker image rm nvidia/cuda:12.8.1-base-ubuntu24.04`, then `docker builder prune -a` for the build cache
+(this clears all unused build cache, other projects' included), and delete the repository folder.
+
+CPU-only hosts, missing PowerShell 7, missing GPU passthrough (step 5 of Setup fails), an outdated driver
+(`The NVIDIA driver on your system is too old`), paths containing a comma (`invalid field … must be a key=value
+pair`; rename or move the file), and the first run's download time are the most common problems — see the 日本語
+troubleshooting section for the checks.
 
 ### Not affiliated with Third Intelligence
 

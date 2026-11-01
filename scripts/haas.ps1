@@ -138,7 +138,9 @@ function Start-BrowserDemo {
         "Start-Sleep -Seconds 10; Start-Process 'http://localhost:7860/longform'"
     )
 
+    # 準備完了の表示 (Ready on ...) がすぐ出るよう、Python の出力をバッファしない
     & docker @($commonArgs + @(
+        '--env', 'PYTHONUNBUFFERED=1',
         '-p', '7860:7860',
         '--entrypoint', 'bash',
         $image,

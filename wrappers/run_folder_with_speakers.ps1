@@ -23,7 +23,8 @@ $script = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\scripts\transc
   haas-asr:local `
   run --project examples/speakers python /opt/Haas-ASR/transcribe_folder_with_speakers.py `
   /data /data `
-  --model third-intelligence/Haas-ja-v1.0
+  --model third-intelligence/Haas-ja-v1.0 `
+  --batch-size 64
 
 $exitCode = $LASTEXITCODE
 if ($exitCode -eq 0) {

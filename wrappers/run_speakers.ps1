@@ -48,8 +48,9 @@ if ($extension -notin $supportedExtensions) {
 }
 
 # 元ファイルと同じフォルダへ出力
+# 通常の文字起こし (example.mp4.txt) と衝突しないよう、フォルダ一括と同じ名前にする
 $outDir = Split-Path -Parent $audio
-$outName = [System.IO.Path]::GetFileName($audio) + '.txt'
+$outName = [System.IO.Path]::GetFileName($audio) + '.speakers.txt'
 $outputPath = Join-Path $outDir $outName
 
 # bashで特殊文字を扱わせないため、コンテナ内では安全な一時名を使用
@@ -71,7 +72,7 @@ try {
       --mount "type=bind,src=$outDir,dst=/output" `
       --mount "type=volume,src=haas-hf-cache,dst=/tmp/huggingface" `
       haas-asr:local `
-      -lc 'ffmpeg -hide_banner -loglevel error -y -i /data/input* -map 0:a:0 -vn -ac 1 -ar 16000 -c:a pcm_s16le /tmp/input.wav && uv run --project examples/speakers python examples/speakers/transcribe_with_speakers.py /tmp/input.wav > "/output/${TEMP_NAME}"'
+      -lc 'ffmpeg -hide_banner -loglevel error -y -i /data/input* -map 0:a:0 -vn -ac 1 -ar 16000 -c:a pcm_s16le /tmp/input.wav && uv run --project examples/speakers python examples/speakers/transcribe_with_speakers.py /tmp/input.wav --batch-size 64 > "/output/${TEMP_NAME}"'
 
     if ($LASTEXITCODE -ne 0) {
         throw "Dockerの処理に失敗しました。終了コード: $LASTEXITCODE"

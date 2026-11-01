@@ -12,6 +12,7 @@ repository use its public `haas_asr` API. The speaker-label modes (scripts/haas.
 wrappers/run_speakers.ps1, scripts/transcribe_folder_with_speakers.py) call the upstream example
 examples/speakers/transcribe_with_speakers.py, which uses NVIDIA's
 Nemotron-3-Diarization (https://huggingface.co/nvidia/Nemotron-3-Diarization,
-OpenMDW-1.1). The browser wrapper starts the upstream demos (Gradio).
+OpenMDW-1.1). The browser-demo modes (scripts/haas.ps1, wrappers/run_browser.bat) start the
+upstream demos (demos/app.py, a FastAPI web app served by uvicorn).
 
 Third-party components retain their respective licenses.
